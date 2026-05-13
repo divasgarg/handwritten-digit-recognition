@@ -443,6 +443,7 @@ elif page == "📊 Batch Prediction":
                             st.caption(f"**{results[img_idx]['Predicted Digit']}** ({results[img_idx]['Confidence (%)']}%)")
 
 # MODEL EXPLAINABILITY PAGE
+# MODEL EXPLAINABILITY PAGE
 elif page == "🔬 Model Explainability":
     st.markdown('<div class="main-header">🔬 Model Explainability <span class="feature-badge">NEW</span></div>', unsafe_allow_html=True)
     
@@ -474,26 +475,38 @@ elif page == "🔬 Model Explainability":
             with col2:
                 st.markdown("### CNN Layer Activations")
                 
-                # Get intermediate layer outputs
-                layer_outputs = [layer.output for layer in model.layers if 'conv' in layer.name]
-                activation_model = Model(inputs=model.input, outputs=layer_outputs)
-                activations = activation_model.predict(img_arr, verbose=0)
+                try:
+                    # Get convolutional layer names
+                    conv_layers = [layer for layer in model.layers if 'conv' in layer.name.lower()]
+                    
+                    if len(conv_layers) == 0:
+                        st.warning("No convolutional layers found in the model.")
+                    else:
+                        # Create intermediate models for each conv layer
+                        for layer_idx, conv_layer in enumerate(conv_layers):
+                            # Create a model that outputs this layer's activation
+                            intermediate_model = Model(inputs=model.input, outputs=conv_layer.output)
+                            activation = intermediate_model.predict(img_arr, verbose=0)
+                            
+                            st.markdown(f"#### Layer {layer_idx + 1}: {conv_layer.name}")
+                            
+                            # Show first 8 filters
+                            n_features = min(8, activation.shape[-1])
+                            fig, axes = plt.subplots(1, n_features, figsize=(16, 2))
+                            
+                            for i in range(n_features):
+                                ax = axes[i] if n_features > 1 else axes
+                                ax.imshow(activation[0, :, :, i], cmap='viridis')
+                                ax.axis('off')
+                                ax.set_title(f'Filter {i+1}', fontsize=9)
+                            
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            plt.close()
                 
-                for layer_idx, activation in enumerate(activations):
-                    st.markdown(f"#### Layer {layer_idx + 1}: {model.layers[layer_idx * 2].name}")
-                    
-                    # Show first 8 filters
-                    n_features = min(8, activation.shape[-1])
-                    fig, axes = plt.subplots(1, n_features, figsize=(16, 2))
-                    
-                    for i in range(n_features):
-                        ax = axes[i] if n_features > 1 else axes
-                        ax.imshow(activation[0, :, :, i], cmap='viridis')
-                        ax.axis('off')
-                        ax.set_title(f'Filter {i+1}', fontsize=9)
-                    
-                    plt.tight_layout()
-                    st.pyplot(fig)
+                except Exception as e:
+                    st.error("⚠️ Model Explainability requires a functional Keras model. The loaded model may not support this feature.")
+                    st.info("💡 This feature works best with models trained using the Functional or Sequential API.")
         else:
             st.info("👆 Upload an image to visualize CNN activations")
 
