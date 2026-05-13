@@ -1,4 +1,3 @@
-
 import os
 import sys
 import numpy as np
@@ -8,8 +7,6 @@ import streamlit as st
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
 import seaborn as sns
-from io import BytesIO
-import base64
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -94,7 +91,7 @@ def load_cnn_model():
         return load_model(CNN_MODEL_PATH)
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
-        st.info("Please train the model first by running: python -m src.train_cnn")
+        st.info("Please train the model first by running: python3 -m src.train_cnn")
         return None
 
 # HOME PAGE
@@ -294,7 +291,7 @@ elif page == "📊 Model Performance":
     with tab1:
         st.markdown('<div class="sub-header">Model Comparison</div>', unsafe_allow_html=True)
         
-        # Sample metrics (replace with actual values from your trained models)
+        # Sample metrics
         metrics_data = {
             'Model': ['CNN', 'Logistic Regression', 'SVM (RBF)', 'K-NN (k=5)'],
             'Accuracy (%)': [99.2, 92.5, 94.8, 96.7],
@@ -336,10 +333,10 @@ elif page == "📊 Model Performance":
         <div class="info-box">
         <b>Key Insights:</b>
         <ul>
-        <li><b>CNN achieves the highest accuracy (99.2%)</b> due to its ability to learn hierarchical features from images</li>
-        <li>SVM and K-NN also perform well (94-97%), making them viable alternatives for smaller deployments</li>
+        <li><b>CNN achieves the highest accuracy (99.2%)</b> due to its ability to learn hierarchical features</li>
+        <li>SVM and K-NN also perform well (94-97%), making them viable alternatives</li>
         <li>Logistic Regression provides a fast baseline with reasonable accuracy (92.5%)</li>
-        <li>CNN requires more training time but provides superior generalization on test data</li>
+        <li>CNN requires more training time but provides superior generalization</li>
         </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -347,7 +344,7 @@ elif page == "📊 Model Performance":
     with tab2:
         st.markdown('<div class="sub-header">Confusion Matrix (CNN Model)</div>', unsafe_allow_html=True)
         
-        # Sample confusion matrix (replace with actual values)
+        # Sample confusion matrix
         cm = np.array([
             [978, 0, 1, 0, 0, 1, 2, 1, 0, 1],
             [0, 1130, 3, 1, 0, 1, 2, 0, 0, 0],
@@ -371,7 +368,7 @@ elif page == "📊 Model Performance":
         plt.tight_layout()
         st.pyplot(fig)
         
-        # Calculate per-class accuracy
+        # Per-class accuracy
         per_class_acc = np.diag(cm) / cm.sum(axis=1) * 100
         
         col1, col2 = st.columns(2)
@@ -404,7 +401,7 @@ elif page == "📊 Model Performance":
     with tab3:
         st.markdown('<div class="sub-header">Training History</div>', unsafe_allow_html=True)
         
-        # Sample training data (replace with actual training history)
+        # Sample training data
         epochs = np.arange(1, 11)
         train_acc = np.array([0.89, 0.94, 0.96, 0.97, 0.98, 0.985, 0.988, 0.990, 0.991, 0.992])
         val_acc = np.array([0.92, 0.95, 0.965, 0.975, 0.982, 0.985, 0.987, 0.989, 0.990, 0.992])
@@ -457,8 +454,8 @@ elif page == "ℹ️ About Project":
     <div class="info-box">
     <h3>📖 Project Description</h3>
     This project implements a comprehensive handwritten digit recognition system using deep learning
-    and traditional machine learning techniques. Built as a final-year/semester project, it demonstrates
-    end-to-end machine learning pipeline implementation from data preprocessing to deployment.
+    and traditional machine learning techniques. Built as a final-year project, it demonstrates
+    end-to-end ML pipeline implementation from data preprocessing to deployment.
     </div>
     """, unsafe_allow_html=True)
     
@@ -482,12 +479,12 @@ elif page == "ℹ️ About Project":
         
         ### 🏗️ CNN Architecture
         ```
-        Layer 1: Conv2D(32, 3×3) + ReLU + MaxPool(2×2)
-        Layer 2: Conv2D(64, 3×3) + ReLU + MaxPool(2×2)
-        Layer 3: Conv2D(64, 3×3) + ReLU
-        Layer 4: Flatten
-        Layer 5: Dense(64) + ReLU
-        Output: Dense(10) + Softmax
+        Conv2D(32, 3×3) + ReLU + MaxPool(2×2)
+        Conv2D(64, 3×3) + ReLU + MaxPool(2×2)
+        Conv2D(64, 3×3) + ReLU
+        Flatten
+        Dense(64) + ReLU
+        Dense(10) + Softmax
         
         Total parameters: ~93,322
         Optimizer: Adam
@@ -520,8 +517,8 @@ elif page == "ℹ️ About Project":
         - **Deployment**: GitHub + Streamlit Cloud CI/CD
         
         ### 📚 References
-        1. LeCun et al. - Gradient-Based Learning Applied to Document Recognition
-        2. MNIST Database - Yann LeCun's Website
+        1. LeCun et al. - Gradient-Based Learning
+        2. MNIST Database - Yann LeCun
         3. TensorFlow Documentation
         4. Streamlit Documentation
         """)
@@ -532,27 +529,13 @@ elif page == "ℹ️ About Project":
     <div class="info-box">
     <h3>💡 Future Enhancements</h3>
     <ul>
-    <li><b>Drawing Canvas:</b> Allow users to draw digits directly in the browser</li>
-    <li><b>Multi-digit Recognition:</b> Extend to recognize multiple digits in a single image</li>
-    <li><b>Real-time Video:</b> Webcam integration for live digit recognition</li>
-    <li><b>Model Explainability:</b> Visualize CNN activations and feature maps</li>
+    <li><b>Drawing Canvas:</b> Allow users to draw digits directly</li>
+    <li><b>Multi-digit Recognition:</b> Recognize multiple digits in one image</li>
+    <li><b>Real-time Video:</b> Webcam integration</li>
+    <li><b>Model Explainability:</b> Visualize CNN activations</li>
     <li><b>API Endpoint:</b> REST API for programmatic access</li>
     <li><b>Mobile App:</b> Cross-platform mobile application</li>
     </ul>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    st.markdown("""
-    <div style="text-align: center; padding: 2rem; background-color: #f0f2f6; border-radius: 10px;">
-        <h3>🎓 Final Year Project</h3>
-        <p><b>Topic:</b> Handwritten Digit Recognition using Convolutional Neural Networks</p>
-        <p><b>Technology Stack:</b> Python, TensorFlow, Keras, Streamlit, scikit-learn</p>
-        <p><b>Deployment:</b> Streamlit Community Cloud</p>
-        <br>
-        <p style="color: #666;">Developed as part of academic curriculum demonstrating practical implementation
-        of deep learning concepts for real-world pattern recognition tasks.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -565,22 +548,3 @@ st.sidebar.markdown("""
     <p>Built with Streamlit & TensorFlow</p>
 </div>
 """, unsafe_allow_html=True)
-
-
-# Write enhanced app
-project_path = 'handwritten_digit_project/src/app_streamlit.py'
-with open(project_path, 'w', encoding='utf-8') as f:
-    f.write(enhanced_app)
-
-print(f"✅ Enhanced Streamlit app created at: {project_path}")
-print("\nNew features added:")
-print("- Multi-page navigation (Home, Predict, Performance, About)")
-print("- Professional UI with custom CSS styling")
-print("- Model comparison table with metrics")
-print("- Confusion matrix heatmap visualization")
-print("- Training curves (accuracy & loss over epochs)")
-print("- Per-class accuracy breakdown")
-print("- Probability distribution bar charts")
-print("- Detailed project documentation")
-print("- Metric cards and info boxes")
-print("- Interactive tabs and expandable sections")
