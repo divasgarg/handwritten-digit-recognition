@@ -2,11 +2,16 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-from PIL import Image
+from PIL import Image, ImageDraw
 import streamlit as st
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model, Model
+from tensorflow.keras.datasets import mnist
 import matplotlib.pyplot as plt
 import seaborn as sns
+import io
+import base64
+from streamlit_drawable_canvas import st_canvas
+import cv2
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +28,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
@@ -73,6 +78,16 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #145a8a;
     }
+    .feature-badge {
+        background-color: #28a745;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-left: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,49 +95,58 @@ st.markdown("""
 st.sidebar.markdown("## 🔢 Navigation")
 page = st.sidebar.radio(
     "Select Page",
-    ["🏠 Home", "🎯 Predict Digit", "📊 Model Performance", "ℹ️ About Project"],
+    [
+        "🏠 Home", 
+        "🎯 Predict Digit", 
+        "✏️ Draw & Predict",
+        "📸 Webcam Predict",
+        "📊 Batch Prediction",
+        "🔬 Model Explainability",
+        "📈 Performance Analysis",
+        "ℹ️ About Project"
+    ],
     label_visibility="collapsed"
 )
 
-# Load model function
+# Load model
 @st.cache_resource
 def load_cnn_model():
     try:
         return load_model(CNN_MODEL_PATH)
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
-        st.info("Please train the model first by running: python3 -m src.train_cnn")
+        st.info("Train the model first: python3 -m src.train_cnn")
         return None
+
+# Preprocess image
+def preprocess_image(img_pil):
+    img = img_pil.convert("L").resize((28, 28))
+    img_arr = np.array(img).astype("float32") / 255.0
+    img_arr = np.expand_dims(img_arr, axis=-1)
+    img_arr = np.expand_dims(img_arr, axis=0)
+    return img_arr, img
+
+# Predict function
+def predict_digit(model, img_arr):
+    preds = model.predict(img_arr, verbose=0)
+    pred_label = int(np.argmax(preds, axis=1)[0])
+    confidence = float(np.max(preds) * 100)
+    return pred_label, confidence, preds[0]
 
 # HOME PAGE
 if page == "🏠 Home":
-    st.markdown('<div class="main-header">🔢 Handwritten Digit Recognition System</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">🔢 Advanced MNIST Digit Recognition System</div>', unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.markdown("""
-        <div class="metric-card">
-            <h2>99.2%</h2>
-            <p>CNN Accuracy</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
+        st.markdown('<div class="metric-card"><h2>99.2%</h2><p>CNN Accuracy</p></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown("""
-        <div class="metric-card">
-            <h2>70,000</h2>
-            <p>Training Images</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
+        st.markdown('<div class="metric-card"><h2>70,000</h2><p>Training Images</p></div>', unsafe_allow_html=True)
     with col3:
-        st.markdown("""
-        <div class="metric-card">
-            <h2>10</h2>
-            <p>Digit Classes</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><h2>10</h2><p>Digit Classes</p></div>', unsafe_allow_html=True)
+    with col4:
+        st.markdown('<div class="metric-card"><h2>&lt;50ms</h2><p>Inference Time</p></div>', unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -132,14 +156,14 @@ if page == "🏠 Home":
         st.markdown('<div class="sub-header">📚 Project Overview</div>', unsafe_allow_html=True)
         st.markdown("""
         <div class="info-box">
-        This system implements a deep learning-based approach for recognizing handwritten digits (0-9)
-        using Convolutional Neural Networks (CNN). The project demonstrates:
+        Advanced handwritten digit recognition system with multiple prediction modes,
+        model explainability, and comprehensive analysis tools.
         
-        - **Deep Learning Architecture**: Custom CNN with 3 convolutional layers
-        - **Multiple ML Models**: Comparison with Logistic Regression, SVM, and KNN
-        - **Real-time Prediction**: Upload or draw digits for instant recognition
-        - **Comprehensive Analysis**: Performance metrics and visualization
-        - **Production Deployment**: Cloud-hosted application on Streamlit
+        - **Deep Learning CNN**: 3-layer architecture with 99.2% accuracy
+        - **Multiple Input Modes**: Upload, Draw, Webcam, Batch processing
+        - **Model Explainability**: Visualize CNN layer activations
+        - **Performance Analytics**: Confusion matrix, training curves, metrics
+        - **Export Capabilities**: Download predictions as CSV
         </div>
         """, unsafe_allow_html=True)
     
@@ -148,65 +172,23 @@ if page == "🏠 Home":
         st.markdown("""
         <div class="info-box">
         <ul>
-        <li><b>Image Upload:</b> Test with your own handwritten digits</li>
-        <li><b>Real-time Prediction:</b> Instant digit classification with confidence scores</li>
-        <li><b>Model Comparison:</b> Performance analysis across multiple algorithms</li>
-        <li><b>Visual Analytics:</b> Confusion matrix and training curves</li>
-        <li><b>Interactive UI:</b> User-friendly interface with detailed explanations</li>
+        <li><b>Image Upload:</b> Standard file upload with instant prediction</li>
+        <li><b>Drawing Canvas:</b> Draw digits directly in browser <span class="feature-badge">NEW</span></li>
+        <li><b>Webcam Capture:</b> Real-time photo capture <span class="feature-badge">NEW</span></li>
+        <li><b>Batch Processing:</b> Predict multiple images at once <span class="feature-badge">NEW</span></li>
+        <li><b>Model Explainability:</b> CNN activation visualization <span class="feature-badge">NEW</span></li>
+        <li><b>Export Results:</b> Download predictions as CSV <span class="feature-badge">NEW</span></li>
         </ul>
         </div>
         """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    st.markdown('<div class="sub-header">🏗️ System Architecture</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    ```
-    ┌─────────────────┐
-    │  Input Image    │  28×28 Grayscale
-    │   (Upload)      │
-    └────────┬────────┘
-             │
-             ▼
-    ┌─────────────────┐
-    │ Preprocessing   │  Normalization (0-1)
-    │                 │  Reshape (28,28,1)
-    └────────┬────────┘
-             │
-             ▼
-    ┌─────────────────────────────────────┐
-    │   Convolutional Neural Network      │
-    │  ┌─────────────────────────────┐   │
-    │  │ Conv2D(32) → MaxPool → ReLU │   │
-    │  │ Conv2D(64) → MaxPool → ReLU │   │
-    │  │ Conv2D(64) → Flatten        │   │
-    │  │ Dense(64) → ReLU            │   │
-    │  │ Dense(10) → Softmax         │   │
-    │  └─────────────────────────────┘   │
-    └────────┬────────────────────────────┘
-             │
-             ▼
-    ┌─────────────────┐
-    │  Prediction     │  Digit (0-9)
-    │  + Confidence   │  + Probabilities
-    └─────────────────┘
-    ```
-    """)
 
 # PREDICT DIGIT PAGE
 elif page == "🎯 Predict Digit":
-    st.markdown('<div class="main-header">🎯 Digit Prediction</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">🎯 Upload & Predict</div>', unsafe_allow_html=True)
     
     model = load_cnn_model()
     
     if model is not None:
-        st.markdown("""
-        <div class="info-box">
-        📸 Upload a handwritten digit image (0-9) or use your own image.
-        The system will automatically resize and normalize it for prediction.
-        </div>
-        """, unsafe_allow_html=True)
-        
         col1, col2 = st.columns([1, 1])
         
         with col1:
@@ -218,97 +200,305 @@ elif page == "🎯 Predict Digit":
             )
             
             if uploaded_file is not None:
-                # Display original image
                 original_img = Image.open(uploaded_file)
                 st.image(original_img, caption="Original Image", use_column_width=True)
                 
-                # Preprocess
-                img = original_img.convert("L").resize((28, 28))
-                img_arr = np.array(img).astype("float32") / 255.0
-                img_arr = np.expand_dims(img_arr, axis=-1)
-                img_arr = np.expand_dims(img_arr, axis=0)
+                img_arr, processed_img = preprocess_image(original_img)
                 
-                # Predict button
                 if st.button("🔍 Predict Digit", use_container_width=True):
-                    with st.spinner("Analyzing image..."):
-                        preds = model.predict(img_arr, verbose=0)
-                        pred_label = int(np.argmax(preds, axis=1)[0])
-                        confidence = float(np.max(preds) * 100)
-                        
-                        # Store in session state
-                        st.session_state.prediction = pred_label
-                        st.session_state.confidence = confidence
-                        st.session_state.probabilities = preds[0]
+                    pred_label, confidence, probs = predict_digit(model, img_arr)
+                    st.session_state.prediction = pred_label
+                    st.session_state.confidence = confidence
+                    st.session_state.probabilities = probs
         
         with col2:
             st.markdown('<div class="sub-header">Prediction Results</div>', unsafe_allow_html=True)
             
             if hasattr(st.session_state, 'prediction'):
-                st.markdown(
-                    f'<div class="prediction-result">Predicted Digit: {st.session_state.prediction}</div>',
-                    unsafe_allow_html=True
-                )
-                
+                st.markdown(f'<div class="prediction-result">Predicted: {st.session_state.prediction}</div>', unsafe_allow_html=True)
                 st.markdown(f"### Confidence: {st.session_state.confidence:.2f}%")
-                
-                # Progress bar for confidence
                 st.progress(st.session_state.confidence / 100)
-                
-                # Probability distribution
-                st.markdown("### Probability Distribution")
-                prob_df = pd.DataFrame({
-                    'Digit': range(10),
-                    'Probability': st.session_state.probabilities * 100
-                })
                 
                 fig, ax = plt.subplots(figsize=(10, 4))
                 colors = ['#1f77b4' if i == st.session_state.prediction else '#aaaaaa' for i in range(10)]
-                ax.bar(prob_df['Digit'], prob_df['Probability'], color=colors)
-                ax.set_xlabel('Digit', fontsize=12)
-                ax.set_ylabel('Probability (%)', fontsize=12)
-                ax.set_title('Class Probabilities', fontsize=14, fontweight='bold')
+                ax.bar(range(10), st.session_state.probabilities * 100, color=colors)
+                ax.set_xlabel('Digit')
+                ax.set_ylabel('Probability (%)')
+                ax.set_title('Class Probabilities')
                 ax.set_xticks(range(10))
                 ax.grid(axis='y', alpha=0.3)
                 plt.tight_layout()
                 st.pyplot(fig)
-                
-                # Detailed probabilities
-                with st.expander("📊 View Detailed Probabilities"):
-                    st.dataframe(
-                        prob_df.style.format({'Probability': '{:.4f}%'})
-                        .background_gradient(cmap='Blues', subset=['Probability']),
-                        use_container_width=True
-                    )
             else:
-                st.info("👆 Upload an image and click 'Predict Digit' to see results")
+                st.info("👆 Upload an image and click 'Predict Digit'")
 
-# MODEL PERFORMANCE PAGE
-elif page == "📊 Model Performance":
-    st.markdown('<div class="main-header">📊 Model Performance Analysis</div>', unsafe_allow_html=True)
+# DRAW & PREDICT PAGE
+elif page == "✏️ Draw & Predict":
+    st.markdown('<div class="main-header">✏️ Draw Your Digit <span class="feature-badge">NEW</span></div>', unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📈 Metrics Comparison", "🔥 Confusion Matrix", "📉 Training Curves"])
+    model = load_cnn_model()
+    
+    if model is not None:
+        st.markdown("""
+        <div class="info-box">
+        🎨 Draw a digit (0-9) on the canvas below. Try to draw it large and centered for best results.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.markdown("### Drawing Canvas")
+            
+            canvas_result = st_canvas(
+                fill_color="rgba(255, 255, 255, 0)",
+                stroke_width=15,
+                stroke_color="#FFFFFF",
+                background_color="#000000",
+                height=280,
+                width=280,
+                drawing_mode="freedraw",
+                key="canvas",
+            )
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("🔍 Predict Drawn Digit", use_container_width=True):
+                    if canvas_result.image_data is not None:
+                        # Convert canvas to PIL Image
+                        img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+                        img = img.convert('L')
+                        
+                        # Preprocess
+                        img_arr, processed = preprocess_image(img)
+                        
+                        # Predict
+                        pred_label, confidence, probs = predict_digit(model, img_arr)
+                        st.session_state.draw_prediction = pred_label
+                        st.session_state.draw_confidence = confidence
+                        st.session_state.draw_probabilities = probs
+                        st.session_state.drawn_image = processed
+            
+            with col_b:
+                if st.button("🗑️ Clear Canvas", use_container_width=True):
+                    st.rerun()
+        
+        with col2:
+            st.markdown("### Prediction Results")
+            
+            if hasattr(st.session_state, 'draw_prediction'):
+                st.markdown(f'<div class="prediction-result">Predicted: {st.session_state.draw_prediction}</div>', unsafe_allow_html=True)
+                st.markdown(f"### Confidence: {st.session_state.draw_confidence:.2f}%")
+                st.progress(st.session_state.draw_confidence / 100)
+                
+                st.image(st.session_state.drawn_image, caption="Processed (28x28)", width=140)
+                
+                fig, ax = plt.subplots(figsize=(10, 4))
+                colors = ['#1f77b4' if i == st.session_state.draw_prediction else '#aaaaaa' for i in range(10)]
+                ax.bar(range(10), st.session_state.draw_probabilities * 100, color=colors)
+                ax.set_xlabel('Digit')
+                ax.set_ylabel('Probability (%)')
+                ax.set_title('Class Probabilities')
+                ax.set_xticks(range(10))
+                ax.grid(axis='y', alpha=0.3)
+                plt.tight_layout()
+                st.pyplot(fig)
+            else:
+                st.info("👈 Draw a digit and click 'Predict'")
+
+# WEBCAM PREDICT PAGE
+elif page == "📸 Webcam Predict":
+    st.markdown('<div class="main-header">📸 Webcam Prediction <span class="feature-badge">NEW</span></div>', unsafe_allow_html=True)
+    
+    model = load_cnn_model()
+    
+    if model is not None:
+        st.markdown("""
+        <div class="info-box">
+        📷 Capture a photo of a handwritten digit using your webcam. Hold a paper with a digit in front of the camera.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.markdown("### Capture Photo")
+            camera_photo = st.camera_input("Take a photo of your digit")
+            
+            if camera_photo is not None:
+                img = Image.open(camera_photo)
+                st.image(img, caption="Captured Image", use_column_width=True)
+                
+                if st.button("🔍 Predict from Webcam", use_container_width=True):
+                    img_arr, processed = preprocess_image(img)
+                    pred_label, confidence, probs = predict_digit(model, img_arr)
+                    st.session_state.webcam_prediction = pred_label
+                    st.session_state.webcam_confidence = confidence
+                    st.session_state.webcam_probabilities = probs
+        
+        with col2:
+            st.markdown("### Prediction Results")
+            
+            if hasattr(st.session_state, 'webcam_prediction'):
+                st.markdown(f'<div class="prediction-result">Predicted: {st.session_state.webcam_prediction}</div>', unsafe_allow_html=True)
+                st.markdown(f"### Confidence: {st.session_state.webcam_confidence:.2f}%")
+                st.progress(st.session_state.webcam_confidence / 100)
+                
+                fig, ax = plt.subplots(figsize=(10, 4))
+                colors = ['#1f77b4' if i == st.session_state.webcam_prediction else '#aaaaaa' for i in range(10)]
+                ax.bar(range(10), st.session_state.webcam_probabilities * 100, color=colors)
+                ax.set_xlabel('Digit')
+                ax.set_ylabel('Probability (%)')
+                ax.set_title('Class Probabilities')
+                ax.set_xticks(range(10))
+                ax.grid(axis='y', alpha=0.3)
+                plt.tight_layout()
+                st.pyplot(fig)
+            else:
+                st.info("👈 Capture a photo and click 'Predict'")
+
+# BATCH PREDICTION PAGE
+elif page == "📊 Batch Prediction":
+    st.markdown('<div class="main-header">📊 Batch Prediction <span class="feature-badge">NEW</span></div>', unsafe_allow_html=True)
+    
+    model = load_cnn_model()
+    
+    if model is not None:
+        st.markdown("""
+        <div class="info-box">
+        📦 Upload multiple digit images at once for batch processing. Results can be exported as CSV.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        uploaded_files = st.file_uploader(
+            "Upload multiple images",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True
+        )
+        
+        if uploaded_files and st.button("🔍 Predict All", use_container_width=True):
+            results = []
+            
+            progress_bar = st.progress(0)
+            cols_per_row = 5
+            
+            for idx, uploaded_file in enumerate(uploaded_files):
+                img = Image.open(uploaded_file)
+                img_arr, _ = preprocess_image(img)
+                pred_label, confidence, probs = predict_digit(model, img_arr)
+                
+                results.append({
+                    'Filename': uploaded_file.name,
+                    'Predicted Digit': pred_label,
+                    'Confidence (%)': round(confidence, 2)
+                })
+                
+                progress_bar.progress((idx + 1) / len(uploaded_files))
+            
+            st.success(f"✅ Processed {len(results)} images!")
+            
+            # Display results table
+            df_results = pd.DataFrame(results)
+            st.dataframe(df_results, use_container_width=True)
+            
+            # Export to CSV
+            csv = df_results.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Results as CSV",
+                data=csv,
+                file_name="batch_predictions.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+            
+            # Visual grid
+            st.markdown("### Prediction Grid")
+            num_images = len(uploaded_files)
+            rows = (num_images + cols_per_row - 1) // cols_per_row
+            
+            for row in range(rows):
+                cols = st.columns(cols_per_row)
+                for col_idx in range(cols_per_row):
+                    img_idx = row * cols_per_row + col_idx
+                    if img_idx < num_images:
+                        with cols[col_idx]:
+                            img = Image.open(uploaded_files[img_idx])
+                            st.image(img, use_column_width=True)
+                            st.caption(f"**{results[img_idx]['Predicted Digit']}** ({results[img_idx]['Confidence (%)']}%)")
+
+# MODEL EXPLAINABILITY PAGE
+elif page == "🔬 Model Explainability":
+    st.markdown('<div class="main-header">🔬 Model Explainability <span class="feature-badge">NEW</span></div>', unsafe_allow_html=True)
+    
+    model = load_cnn_model()
+    
+    if model is not None:
+        st.markdown("""
+        <div class="info-box">
+        🧠 Visualize what the CNN "sees" at each layer. Upload an image to see activation maps.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        uploaded_file = st.file_uploader("Upload image for activation visualization", type=["png", "jpg", "jpeg"])
+        
+        if uploaded_file is not None:
+            img = Image.open(uploaded_file)
+            img_arr, processed_img = preprocess_image(img)
+            
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                st.markdown("### Input Image")
+                st.image(processed_img, caption="28x28 Preprocessed", width=200)
+                
+                pred_label, confidence, _ = predict_digit(model, img_arr)
+                st.markdown(f"**Predicted:** {pred_label}")
+                st.markdown(f"**Confidence:** {confidence:.1f}%")
+            
+            with col2:
+                st.markdown("### CNN Layer Activations")
+                
+                # Get intermediate layer outputs
+                layer_outputs = [layer.output for layer in model.layers if 'conv' in layer.name]
+                activation_model = Model(inputs=model.input, outputs=layer_outputs)
+                activations = activation_model.predict(img_arr, verbose=0)
+                
+                for layer_idx, activation in enumerate(activations):
+                    st.markdown(f"#### Layer {layer_idx + 1}: {model.layers[layer_idx * 2].name}")
+                    
+                    # Show first 8 filters
+                    n_features = min(8, activation.shape[-1])
+                    fig, axes = plt.subplots(1, n_features, figsize=(16, 2))
+                    
+                    for i in range(n_features):
+                        ax = axes[i] if n_features > 1 else axes
+                        ax.imshow(activation[0, :, :, i], cmap='viridis')
+                        ax.axis('off')
+                        ax.set_title(f'Filter {i+1}', fontsize=9)
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+        else:
+            st.info("👆 Upload an image to visualize CNN activations")
+
+# PERFORMANCE ANALYSIS PAGE
+elif page == "📈 Performance Analysis":
+    st.markdown('<div class="main-header">📈 Performance Analysis</div>', unsafe_allow_html=True)
+    
+    tab1, tab2, tab3 = st.tabs(["📊 Metrics Comparison", "🔥 Confusion Matrix", "📉 Training Curves"])
     
     with tab1:
-        st.markdown('<div class="sub-header">Model Comparison</div>', unsafe_allow_html=True)
-        
-        # Sample metrics
         metrics_data = {
             'Model': ['CNN', 'Logistic Regression', 'SVM (RBF)', 'K-NN (k=5)'],
             'Accuracy (%)': [99.2, 92.5, 94.8, 96.7],
             'Precision (%)': [99.3, 92.6, 94.9, 96.8],
             'Recall (%)': [99.2, 92.4, 94.7, 96.6],
-            'F1-Score (%)': [99.2, 92.5, 94.8, 96.7],
-            'Training Time (s)': [450, 120, 890, 25]
+            'F1-Score (%)': [99.2, 92.5, 94.8, 96.7]
         }
         
         df_metrics = pd.DataFrame(metrics_data)
+        st.dataframe(df_metrics.style.background_gradient(cmap='RdYlGn'), use_container_width=True)
         
-        st.dataframe(
-            df_metrics.style.background_gradient(cmap='RdYlGn', subset=['Accuracy (%)', 'Precision (%)', 'Recall (%)', 'F1-Score (%)']),
-            use_container_width=True
-        )
-        
-        # Bar chart comparison
         fig, ax = plt.subplots(figsize=(12, 6))
         x = np.arange(len(df_metrics['Model']))
         width = 0.2
@@ -318,33 +508,17 @@ elif page == "📊 Model Performance":
         ax.bar(x + 0.5*width, df_metrics['Recall (%)'], width, label='Recall', color='#2ca02c')
         ax.bar(x + 1.5*width, df_metrics['F1-Score (%)'], width, label='F1-Score', color='#d62728')
         
-        ax.set_xlabel('Model', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Score (%)', fontsize=12, fontweight='bold')
-        ax.set_title('Model Performance Comparison', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Model', fontweight='bold')
+        ax.set_ylabel('Score (%)', fontweight='bold')
+        ax.set_title('Model Performance Comparison', fontweight='bold')
         ax.set_xticks(x)
         ax.set_xticklabels(df_metrics['Model'], rotation=15, ha='right')
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
         plt.tight_layout()
         st.pyplot(fig)
-        
-        # Key insights
-        st.markdown("""
-        <div class="info-box">
-        <b>Key Insights:</b>
-        <ul>
-        <li><b>CNN achieves the highest accuracy (99.2%)</b> due to its ability to learn hierarchical features</li>
-        <li>SVM and K-NN also perform well (94-97%), making them viable alternatives</li>
-        <li>Logistic Regression provides a fast baseline with reasonable accuracy (92.5%)</li>
-        <li>CNN requires more training time but provides superior generalization</li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
     
     with tab2:
-        st.markdown('<div class="sub-header">Confusion Matrix (CNN Model)</div>', unsafe_allow_html=True)
-        
-        # Sample confusion matrix
         cm = np.array([
             [978, 0, 1, 0, 0, 1, 2, 1, 0, 1],
             [0, 1130, 3, 1, 0, 1, 2, 0, 0, 0],
@@ -360,133 +534,59 @@ elif page == "📊 Model Performance":
         
         fig, ax = plt.subplots(figsize=(10, 8))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
-                    xticklabels=range(10), yticklabels=range(10),
-                    cbar_kws={'label': 'Count'})
-        ax.set_xlabel('Predicted Label', fontsize=12, fontweight='bold')
-        ax.set_ylabel('True Label', fontsize=12, fontweight='bold')
-        ax.set_title('Confusion Matrix - CNN Model', fontsize=14, fontweight='bold')
+                    xticklabels=range(10), yticklabels=range(10))
+        ax.set_xlabel('Predicted', fontweight='bold')
+        ax.set_ylabel('True', fontweight='bold')
+        ax.set_title('Confusion Matrix', fontweight='bold')
         plt.tight_layout()
         st.pyplot(fig)
-        
-        # Per-class accuracy
-        per_class_acc = np.diag(cm) / cm.sum(axis=1) * 100
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("### Per-Class Accuracy")
-            acc_df = pd.DataFrame({
-                'Digit': range(10),
-                'Accuracy (%)': per_class_acc
-            })
-            st.dataframe(
-                acc_df.style.format({'Accuracy (%)': '{:.2f}%'})
-                .background_gradient(cmap='Greens', subset=['Accuracy (%)']),
-                use_container_width=True
-            )
-        
-        with col2:
-            st.markdown("### Most Confused Pairs")
-            st.markdown("""
-            <div class="info-box">
-            <b>Common Misclassifications:</b>
-            <ul>
-            <li>4 ↔ 9: Similar vertical strokes</li>
-            <li>3 ↔ 5: Curved upper portions</li>
-            <li>7 ↔ 1: Vertical lines confusion</li>
-            <li>2 ↔ 7: Angular similarities</li>
-            </ul>
-            </div>
-            """, unsafe_allow_html=True)
     
     with tab3:
-        st.markdown('<div class="sub-header">Training History</div>', unsafe_allow_html=True)
-        
-        # Sample training data
         epochs = np.arange(1, 11)
         train_acc = np.array([0.89, 0.94, 0.96, 0.97, 0.98, 0.985, 0.988, 0.990, 0.991, 0.992])
         val_acc = np.array([0.92, 0.95, 0.965, 0.975, 0.982, 0.985, 0.987, 0.989, 0.990, 0.992])
-        train_loss = np.array([0.35, 0.20, 0.15, 0.12, 0.09, 0.08, 0.07, 0.06, 0.055, 0.05])
-        val_loss = np.array([0.28, 0.18, 0.13, 0.10, 0.08, 0.075, 0.07, 0.065, 0.06, 0.058])
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig, ax = plt.subplots(figsize=(8, 5))
-            ax.plot(epochs, train_acc, 'o-', label='Training Accuracy', linewidth=2, markersize=6)
-            ax.plot(epochs, val_acc, 's-', label='Validation Accuracy', linewidth=2, markersize=6)
-            ax.set_xlabel('Epoch', fontsize=12, fontweight='bold')
-            ax.set_ylabel('Accuracy', fontsize=12, fontweight='bold')
-            ax.set_title('Model Accuracy Over Epochs', fontsize=14, fontweight='bold')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.tight_layout()
-            st.pyplot(fig)
-        
-        with col2:
-            fig, ax = plt.subplots(figsize=(8, 5))
-            ax.plot(epochs, train_loss, 'o-', label='Training Loss', linewidth=2, markersize=6, color='coral')
-            ax.plot(epochs, val_loss, 's-', label='Validation Loss', linewidth=2, markersize=6, color='crimson')
-            ax.set_xlabel('Epoch', fontsize=12, fontweight='bold')
-            ax.set_ylabel('Loss', fontsize=12, fontweight='bold')
-            ax.set_title('Model Loss Over Epochs', fontsize=14, fontweight='bold')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.tight_layout()
-            st.pyplot(fig)
-        
-        st.markdown("""
-        <div class="info-box">
-        <b>Training Observations:</b>
-        <ul>
-        <li>Model converges rapidly within the first 5 epochs</li>
-        <li>No significant overfitting observed (train and validation curves are close)</li>
-        <li>Early stopping at epoch 10 prevents unnecessary computation</li>
-        <li>Final validation accuracy: <b>99.2%</b></li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(epochs, train_acc, 'o-', label='Training', linewidth=2)
+        ax.plot(epochs, val_acc, 's-', label='Validation', linewidth=2)
+        ax.set_xlabel('Epoch', fontweight='bold')
+        ax.set_ylabel('Accuracy', fontweight='bold')
+        ax.set_title('Model Accuracy', fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig)
 
 # ABOUT PROJECT PAGE
 elif page == "ℹ️ About Project":
     st.markdown('<div class="main-header">ℹ️ About This Project</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="info-box">
-    <h3>📖 Project Description</h3>
-    This project implements a comprehensive handwritten digit recognition system using deep learning
-    and traditional machine learning techniques. Built as a final-year project, it demonstrates
-    end-to-end ML pipeline implementation from data preprocessing to deployment.
-    </div>
-    """, unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
         ### 🎯 Objectives
-        1. Develop a CNN-based digit recognition system
-        2. Compare performance with classical ML algorithms
-        3. Deploy an interactive web application
-        4. Achieve >99% accuracy on test dataset
-        5. Provide comprehensive performance analysis
+        1. CNN-based digit recognition (99%+ accuracy)
+        2. Multiple input modes (upload/draw/webcam)
+        3. Model explainability with activation visualization
+        4. Batch processing with CSV export
+        5. Comprehensive performance analysis
         
         ### 📊 Dataset: MNIST
-        - **Training samples**: 60,000 images
-        - **Test samples**: 10,000 images
-        - **Image size**: 28×28 pixels (grayscale)
-        - **Classes**: 10 digits (0-9)
-        - **Source**: Modified NIST database
+        - **Training**: 60,000 images
+        - **Test**: 10,000 images
+        - **Size**: 28×28 grayscale
+        - **Classes**: 0-9 digits
         
         ### 🏗️ CNN Architecture
         ```
-        Conv2D(32, 3×3) + ReLU + MaxPool(2×2)
-        Conv2D(64, 3×3) + ReLU + MaxPool(2×2)
-        Conv2D(64, 3×3) + ReLU
-        Flatten
+        Conv2D(32) + MaxPool + ReLU
+        Conv2D(64) + MaxPool + ReLU
+        Conv2D(64) + Flatten
         Dense(64) + ReLU
         Dense(10) + Softmax
         
-        Total parameters: ~93,322
+        Parameters: ~93,322
         Optimizer: Adam
         Loss: Sparse Categorical Crossentropy
         ```
@@ -494,57 +594,41 @@ elif page == "ℹ️ About Project":
     
     with col2:
         st.markdown("""
-        ### 🛠️ Technologies Used
+        ### 🛠️ Technologies
         - **Deep Learning**: TensorFlow, Keras
-        - **ML Algorithms**: scikit-learn
-        - **Web Framework**: Streamlit
-        - **Visualization**: Matplotlib, Seaborn
-        - **Data Processing**: NumPy, Pandas, Pillow
-        - **Deployment**: Streamlit Community Cloud
+        - **ML**: scikit-learn
+        - **Web**: Streamlit, streamlit-drawable-canvas
+        - **Viz**: Matplotlib, Seaborn
+        - **Data**: NumPy, Pandas, Pillow, OpenCV
+        - **Deploy**: Streamlit Cloud
         
-        ### 📈 Key Results
+        ### 📈 Results
         | Metric | Value |
         |--------|-------|
-        | CNN Test Accuracy | 99.2% |
-        | Training Time | ~7 minutes |
-        | Inference Time | <50ms |
+        | CNN Accuracy | 99.2% |
+        | Training Time | ~7 min |
+        | Inference | <50ms |
         | Model Size | ~1.2 MB |
         
-        ### 👨‍💻 Implementation Details
-        - **Data Preprocessing**: Normalization (0-1), reshaping
-        - **Training Strategy**: Early stopping, validation split (10%)
-        - **Evaluation**: Accuracy, Precision, Recall, F1-Score, Confusion Matrix
-        - **Deployment**: GitHub + Streamlit Cloud CI/CD
-        
-        ### 📚 References
-        1. LeCun et al. - Gradient-Based Learning
-        2. MNIST Database - Yann LeCun
-        3. TensorFlow Documentation
-        4. Streamlit Documentation
+        ### 💡 Future Enhancements
+        - Multi-digit detection with YOLO/SSD
+        - Real-time video stream processing
+        - REST API with FastAPI backend
+        - Mobile app (React Native/Flutter)
+        - Model compression & quantization
+        - Transfer learning for other datasets
+        - Attention mechanism visualization
+        - A/B testing framework
+        - User feedback collection
+        - Cloud deployment (AWS/GCP/Azure)
         """)
-    
-    st.markdown("---")
-    
-    st.markdown("""
-    <div class="info-box">
-    <h3>💡 Future Enhancements</h3>
-    <ul>
-    <li><b>Drawing Canvas:</b> Allow users to draw digits directly</li>
-    <li><b>Multi-digit Recognition:</b> Recognize multiple digits in one image</li>
-    <li><b>Real-time Video:</b> Webcam integration</li>
-    <li><b>Model Explainability:</b> Visualize CNN activations</li>
-    <li><b>API Endpoint:</b> REST API for programmatic access</li>
-    <li><b>Mobile App:</b> Cross-platform mobile application</li>
-    </ul>
-    </div>
-    """, unsafe_allow_html=True)
 
 # Footer
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
-<div style="text-align: center; color: #666; font-size: 0.9rem;">
-    <p><b>MNIST Digit Recognition</b></p>
-    <p>Deep Learning Project</p>
-    <p>Built with Streamlit & TensorFlow</p>
+<div style="text-align: center; color: #666; font-size: 0.85rem;">
+    <p><b>MNIST Recognition System v2.0</b></p>
+    <p>Advanced Deep Learning Project</p>
+    <p>TensorFlow • Streamlit • OpenCV</p>
 </div>
 """, unsafe_allow_html=True)
