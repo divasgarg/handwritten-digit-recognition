@@ -120,11 +120,27 @@ def load_cnn_model():
 
 # Preprocess image
 def preprocess_image(img_pil):
+    """Preprocess image to match MNIST format"""
+    # Convert to grayscale
     img = img_pil.convert("L").resize((28, 28))
-    img_arr = np.array(img).astype("float32") / 255.0
+    img_arr = np.array(img).astype("float32")
+    
+    # Check if we need to invert (MNIST has white digits on black background)
+    # If the image has black digit on white background, invert it
+    if img_arr.mean() > 127:  # Bright background detected
+        img_arr = 255 - img_arr  # Invert colors
+    
+    # Normalize to 0-1
+    img_arr = img_arr / 255.0
+    
+    # Reshape for CNN
     img_arr = np.expand_dims(img_arr, axis=-1)
     img_arr = np.expand_dims(img_arr, axis=0)
-    return img_arr, img
+    
+    # Return both processed array and PIL image for display
+    img_display = Image.fromarray((img_arr[0, :, :, 0] * 255).astype('uint8'))
+    return img_arr, img_display
+
 
 # Predict function
 def predict_digit(model, img_arr):
