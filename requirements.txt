@@ -1,7 +1,3 @@
-cd /Users/divasgarg/Downloads/handwritten_digit_project
-
-cat > requirements.txt << 'EOF'
-# Core ML/DL libraries - Updated for Python 3.12 compatibility
 tensorflow>=2.16.0
 keras>=3.0.0
 scikit-learn>=1.3.0
