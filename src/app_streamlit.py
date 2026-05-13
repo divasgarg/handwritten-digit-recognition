@@ -1,9 +1,13 @@
+import os
+import sys
 import numpy as np
 from PIL import Image
 import streamlit as st
 from tensorflow.keras.models import load_model
 
-from .config import CNN_MODEL_PATH
+# Ensure project root is on sys.path so we can import src.config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.config import CNN_MODEL_PATH
 
 
 st.title('Handwritten Digit Recognition (MNIST)')
