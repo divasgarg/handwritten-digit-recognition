@@ -1,1 +1,1 @@
-Package for MNIST handwritten digit recognition project.
+"""Package for MNIST handwritten digit recognition project."""
