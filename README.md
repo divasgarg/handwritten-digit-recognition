@@ -1,8 +1,8 @@
-# 🔢 Advanced MNIST Handwritten Digit Recognition System
+# Handwritten Digit Recognition
 
-## 🌟 Project Overview
+An MNIST project for exploring handwritten digit predictions. Start with the Streamlit app to try a digit, or open the notebook to explore the dataset.
 
-A comprehensive deep learning system for handwritten digit recognition featuring multiple input modes, model explainability, and advanced analytics. Built as a final-year project demonstrating production-ready ML deployment.
+[Streamlit app](src/app_streamlit.py) · [Exploration notebook](notebooks/mnist_exploration.ipynb) · [Trained model](models/cnn_mnist.h5)
 
 ### ✨ Key Features
 
